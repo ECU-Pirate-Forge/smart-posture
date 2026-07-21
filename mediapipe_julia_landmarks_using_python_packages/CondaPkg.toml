@@ -1,0 +1,9 @@
+channels = ["conda-forge"]
+
+[deps]
+python = "3.11*"
+pip = "==24"
+
+[pip.deps]
+mediapipe = "==0.10.14"
+opencv-python = "==4.10.0.84"

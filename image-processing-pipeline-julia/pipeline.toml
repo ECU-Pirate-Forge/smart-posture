@@ -1,0 +1,52 @@
+app_source = "Mandrill"
+version = 1
+
+[[nodes]]
+source = "App Source"
+param = 9
+id = 1
+x = 30.0
+operation = "Identity"
+y = 30.0
+[[nodes]]
+source = "Node 1"
+param = 1
+id = 2
+x = 330.0
+operation = "Rotate"
+y = 30.0
+[[nodes]]
+source = "Node 2"
+param = 9
+id = 3
+x = 630.0
+operation = "Gray"
+y = 30.0
+[[nodes]]
+source = "Node 3"
+param = 3
+id = 4
+x = 930.0
+operation = "Blur"
+y = 30.0
+[[nodes]]
+source = "Node 4"
+param = 28
+id = 5
+x = 1235.0
+operation = "Threshold"
+y = 27.0
+[[nodes]]
+source = "Node 5"
+param = 51
+id = 6
+x = 1538.0
+operation = "Canny"
+y = 26.0
+[[nodes]]
+source = "Node 6"
+param = 9
+id = 7
+x = 1543.0
+operation = "Negative"
+y = 474.0

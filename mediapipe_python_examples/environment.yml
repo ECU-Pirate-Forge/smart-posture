@@ -1,0 +1,9 @@
+name: opencv-demo
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - mediapipe==0.10.14
+      - opencv-python
