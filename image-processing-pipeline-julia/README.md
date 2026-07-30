@@ -9,9 +9,24 @@
 - Internet access during first setup so Julia can download packages and binary artifacts.
 - A terminal opened at the repository root.
 
-On Windows, run the app from a normal desktop terminal. Avoid launching it from an activated Conda environment unless you specifically need that shell, because Conda can add DLL directories to `PATH` that interfere with Julia OpenCV/Qt artifacts.
+
 
 ## Setup
+
+Using precompiled OpenCV.jl bindings.
+
+From the repository root:
+julia --project=.   # to open current folder as a project using Project.toml
+]                   # to open package manager
+instantiate         # download and install packages listed in Project.toml
+<press the back button> to exit package manager
+exit()              # exits the julia prompt
+
+julia --project=. image_processing_pipeline.jl # runs the julia app
+
+
+
+
 
 From the repository root:
 
