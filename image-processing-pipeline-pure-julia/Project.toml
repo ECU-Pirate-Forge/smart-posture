@@ -1,0 +1,15 @@
+[deps]
+FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+Gtk4 = "9db2cae5-386f-4011-9d63-a5602296539b"
+ImageCore = "a09fc81d-aa75-5fe9-8630-4744c3626534"
+ImageIO = "82e4d734-157c-48bb-816b-45c225c6df19"
+TestImages = "5e47fb64-e119-507b-a336-dd2b206d9990"
+TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+
+[compat]
+FileIO = "1"
+Gtk4 = "0.7"
+ImageCore = "0.10"
+ImageIO = "0.6"
+TestImages = "1"
+julia = "1.10"
