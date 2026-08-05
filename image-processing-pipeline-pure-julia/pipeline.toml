@@ -1,0 +1,18 @@
+app_source = "Mandrill"
+version = 1
+
+[[nodes]]
+source = "App Source"
+param = 9
+id = 1
+x = 30.0
+operation = "Identity"
+y = 30.0
+
+[[nodes]]
+source = "Node 1"
+param = 3
+id = 2
+x = 330.0
+operation = "Blur"
+y = 30.0
