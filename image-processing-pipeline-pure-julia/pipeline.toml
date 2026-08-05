@@ -8,7 +8,6 @@ id = 1
 x = 30.0
 operation = "Identity"
 y = 30.0
-
 [[nodes]]
 source = "Node 1"
 param = 3
@@ -16,3 +15,38 @@ id = 2
 x = 330.0
 operation = "Blur"
 y = 30.0
+[[nodes]]
+source = "Node 2"
+param = 9
+id = 3
+x = 630.0
+operation = "Gray"
+y = 30.0
+[[nodes]]
+source = "Node 3"
+param = 2
+id = 4
+x = 930.0
+operation = "Erode"
+y = 30.0
+[[nodes]]
+source = "Node 4"
+param = 22
+id = 5
+x = 1254.0
+operation = "Threshold"
+y = 17.0
+[[nodes]]
+source = "Node 5"
+param = 5
+id = 6
+x = 16.0
+operation = "Canny"
+y = 415.0
+[[nodes]]
+source = "Node 6"
+param = 9
+id = 7
+x = 342.0
+operation = "Negative"
+y = 469.0

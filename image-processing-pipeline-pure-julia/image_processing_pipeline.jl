@@ -151,7 +151,7 @@ end
 
 function render_preview!(node::PipelineNode, image)
     output_path = tempname() * ".png"
-    save(output_path, image)
+    FileIO.save(output_path, image)
     set_gtk_property!(node.image_widget, :file, output_path)
     remove_preview!(node)
     node.preview_file = output_path
@@ -379,7 +379,7 @@ function build_ui(app)
         set_gtk_property!(status, :label, "Graph recomputed")
     end
     signal_connect(save_button, "clicked") do _
-        path = strip(String(get_gtk_property(config_path, :text, String)))
+        path = String(strip(String(get_gtk_property(config_path, :text, String))))
         if isempty(path)
             set_gtk_property!(status, :label, "Save failed: empty config path")
             return
