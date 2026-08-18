@@ -1,5 +1,7 @@
 # STEP 1: Import the necessary modules
 import cv2
+import json
+from pathlib import Path
 import numpy as np
 import mediapipe as mp
 from mediapipe.tasks import python
@@ -60,4 +62,6 @@ if detection_result.segmentation_masks:
   cv2.imwrite('segmentation_mask.jpg', visualized_mask)
 
 print('Wrote annotated_landmarks.jpg')
+
+
 
