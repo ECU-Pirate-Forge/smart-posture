@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Tuple
+from typing import Any, Mapping, Optional, Sequence, Tuple
 import numpy as np
 import math
 Vec2 = np.ndarray
@@ -28,12 +28,18 @@ class BodyPart:
         position: Optional[Sequence[float]] = None,
         confidence: float = 1.0,
         label: str = "BodyPart",
+        depth: Optional[float] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
     ) -> None:
+        if position is not None and len(position) < 2:
+            raise ValueError("position must contain x and y coordinates")
         self._position: Optional[Vec2] = (
-            np.array(position, dtype=np.float64) if position is not None else None
+            np.array(position[:2], dtype=np.float64) if position is not None else None
         )
-        self._confidence = float(confidence)
+        self.confidence = confidence
         self._label = label
+        self._depth = float(depth) if depth is not None else None
+        self.metadata = dict(metadata or {})
 
         # Derived attributes (computed lazily or set externally)
         self._posture: Optional[str] = None   # e.g. "elevated", "neutral", …
@@ -50,9 +56,38 @@ class BodyPart:
 
     @position.setter
     def position(self, value: Optional[Sequence[float]]) -> None:
+        if value is not None and len(value) < 2:
+            raise ValueError("position must contain x and y coordinates")
         self._position = (
-            np.array(value, dtype=np.float64) if value is not None else None
+            np.array(value[:2], dtype=np.float64) if value is not None else None
         )
+
+    @property
+    def x(self) -> Optional[float]:
+        """Normalized horizontal coordinate, or ``None`` when missing."""
+        return None if self._position is None else float(self._position[0])
+
+    @property
+    def y(self) -> Optional[float]:
+        """Normalized vertical coordinate, or ``None`` when missing."""
+        return None if self._position is None else float(self._position[1])
+
+    @property
+    def label(self) -> str:
+        """The stable anatomical keypoint name."""
+        return self._label
+
+    @property
+    def depth(self) -> Optional[float]:
+        """Optional model-provided or explicitly estimated relative depth.
+
+        Standard YOLOv8 Pose landmarks do not populate this value.
+        """
+        return self._depth
+
+    @depth.setter
+    def depth(self, value: Optional[float]) -> None:
+        self._depth = float(value) if value is not None else None
 
     @property
     def confidence(self) -> float:
@@ -93,6 +128,10 @@ class BodyPart:
     def is_valid(self) -> bool:
         """True when the keypoint position is available (not None)."""
         return self._position is not None
+
+    def is_reliable(self, minimum_confidence: float = 0.5) -> bool:
+        """Whether this landmark is present and meets a confidence threshold."""
+        return self.is_valid and self.confidence >= minimum_confidence
     
     # ------------------------------------------------------------------
     # Dunder helpers

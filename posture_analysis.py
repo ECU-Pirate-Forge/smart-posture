@@ -26,17 +26,36 @@ rotation within the frame.
 from __future__ import annotations
 
 import math
-from typing import Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Dict, Optional, Sequence, Tuple, TYPE_CHECKING
 
 import numpy as np
 
 from body_parts import *
 import body_parts
 
+if TYPE_CHECKING:
+    from skeleton import Skeleton, ViewpointEstimate
+
 
 # ===========================================================================
 # PostureMetrics – lightweight data container
 # ===========================================================================
+
+@dataclass(frozen=True)
+class MetricResult:
+    """Reliability metadata for one metric.
+
+    ``value`` is absent instead of fabricated when the source landmarks are
+    missing or below the configured confidence threshold.
+    """
+
+    value: Optional[float]
+    confidence: float
+    valid: bool
+    reason: Optional[str] = None
+    estimated: bool = False
+
 
 class PostureMetrics:
     """
@@ -67,6 +86,8 @@ class PostureMetrics:
         Midpoint of the two shoulders in *image* space.
     hip_midpoint : np.ndarray or None
         Midpoint of the two hips in *image* space.
+    spine_midpoint : np.ndarray or None
+        Midpoint of the shoulder and hip midpoints in *image* space.
     """
 
     def __init__(self) -> None:
@@ -77,6 +98,10 @@ class PostureMetrics:
         self.torso_area:        Optional[float]    = None
         self.shoulder_midpoint: Optional[Vec2]     = None
         self.hip_midpoint:      Optional[Vec2]     = None
+        self.spine_midpoint:    Optional[Vec2]     = None
+        self.metric_results: Dict[str, MetricResult] = {}
+        self.viewpoint: Optional[str] = None
+        self.viewpoint_confidence: float = 0.0
 
     def __repr__(self) -> str:
         lines = ["PostureMetrics("]
@@ -144,20 +169,66 @@ class PostureAnalyzer:
         left_hip:       body_parts.LeftHip,
         right_hip:      body_parts.RightHip,
         align_hips:     bool = True,
+        minimum_confidence: float = 0.5,
     ) -> None:
         self.left_shoulder  = left_shoulder
         self.right_shoulder = right_shoulder
         self.left_hip       = left_hip
         self.right_hip      = right_hip
         self.align_hips     = align_hips
+        if not 0.0 <= minimum_confidence <= 1.0:
+            raise ValueError("minimum_confidence must be in [0, 1]")
+        self.minimum_confidence = minimum_confidence
+
+    @classmethod
+    def from_skeleton(cls, skeleton: "Skeleton", *, align_hips: bool = True) -> "PostureAnalyzer":
+        """Construct an analyzer from the shared YOLO keypoint adapter."""
+        return cls(
+            skeleton.left_shoulder, skeleton.right_shoulder,
+            skeleton.left_hip, skeleton.right_hip,
+            align_hips=align_hips,
+            minimum_confidence=skeleton.minimum_confidence,
+        )
+
+    @classmethod
+    def analyze(cls, skeleton: "Skeleton", *, align_hips: bool = True) -> PostureMetrics:
+        """US-spelling convenience API: ``PostureAnalyzer.analyze(skeleton)``."""
+        analyzer = cls.from_skeleton(skeleton, align_hips=align_hips)
+        metrics = analyzer.analyse()
+        viewpoint = skeleton.estimate_viewpoint()
+        metrics.viewpoint = viewpoint.viewpoint.value
+        metrics.viewpoint_confidence = viewpoint.confidence
+        analyzer._apply_viewpoint_reliability(metrics, viewpoint)
+        return metrics
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     def _require(self, *parts: BodyPart) -> bool:
-        """Return True only if every supplied BodyPart has a valid position."""
-        return all(p.is_valid for p in parts)
+        """Return True only for present keypoints above the confidence floor."""
+        return all(p.is_reliable(self.minimum_confidence) for p in parts)
+
+    def _result(self, value: Optional[float], *parts: BodyPart, reason: Optional[str] = None) -> MetricResult:
+        if value is None:
+            if reason is None:
+                reason = "missing, low-confidence, or degenerate keypoint data"
+            return MetricResult(None, 0.0, False, reason)
+        confidence = min(part.confidence for part in parts) if parts else 1.0
+        return MetricResult(value, confidence, True)
+
+    def _apply_viewpoint_reliability(self, metrics: PostureMetrics, viewpoint: "ViewpointEstimate") -> None:
+        """Downgrade—not reinterpret—2D torso metrics in non-frontal views."""
+        from skeleton import Viewpoint
+        if viewpoint.viewpoint not in (Viewpoint.PROFILE, Viewpoint.OBLIQUE):
+            return
+        for name in ("shoulder_tilt", "hip_tilt", "torso_symmetry", "torso_area"):
+            result = metrics.metric_results.get(name)
+            if result and result.valid:
+                metrics.metric_results[name] = MetricResult(
+                    result.value, result.confidence * 0.5, True,
+                    "2D measurement is viewpoint-sensitive", estimated=True,
+                )
 
     def _normalised_coords(
         self,
@@ -212,8 +283,8 @@ class PostureAnalyzer:
         Angle (°) of the shoulder line relative to horizontal.
 
         Computed in **image space** (before body-centred normalisation) so
-        that the raw tilt is preserved.  Positive = left shoulder is *lower*
-        in the image (higher y value) than right shoulder.
+        that the raw tilt is preserved.  Positive = right shoulder is *lower*
+        in the image (higher y value) than left shoulder.
 
         Returns
         -------
@@ -344,6 +415,16 @@ class PostureAnalyzer:
         metrics.torso_symmetry    = self.torso_triangle_symmetry()
         metrics.torso_area        = self.torso_triangle_area()
 
+        metric_parts = {
+            "shoulder_tilt": (self.left_shoulder, self.right_shoulder),
+            "hip_tilt": (self.left_hip, self.right_hip),
+            "spine_inclination": (self.left_shoulder, self.right_shoulder, self.left_hip, self.right_hip),
+            "torso_symmetry": (self.left_shoulder, self.right_shoulder, self.left_hip, self.right_hip),
+            "torso_area": (self.left_shoulder, self.right_shoulder, self.left_hip, self.right_hip),
+        }
+        for name, parts in metric_parts.items():
+            metrics.metric_results[name] = self._result(getattr(metrics, name), *parts)
+
         # Convenience midpoints in image space
         if self._require(self.left_shoulder, self.right_shoulder):
             metrics.shoulder_midpoint = BodyPart.midpoint(
@@ -355,6 +436,11 @@ class PostureAnalyzer:
                 self.left_hip.position,   # type: ignore[arg-type]
                 self.right_hip.position,  # type: ignore[arg-type]
             )
+        if metrics.shoulder_midpoint is not None and metrics.hip_midpoint is not None:
+            metrics.spine_midpoint = BodyPart.midpoint(
+                metrics.shoulder_midpoint,
+                metrics.hip_midpoint,
+            )
 
         # ---------------------------------------------------------------
         # Annotate BodyPart instances with derived angle / posture labels
@@ -362,14 +448,15 @@ class PostureAnalyzer:
         shld_tilt = metrics.shoulder_tilt
         if shld_tilt is not None:
             # For shoulders, we use the tilt relative to each midpoint.
-            # Left shoulder: positive tilt angle means it's lower than right.
+            # The segment runs left→right; positive image-space slope means
+            # the right landmark has the larger y coordinate (is lower).
             self.left_shoulder.angle  = shld_tilt
             self.right_shoulder.angle = shld_tilt
 
             # Simple categorical labels (thresholds are heuristic)
             if abs(shld_tilt) < 2.0:
                 label = "level"
-            elif shld_tilt > 0:
+            elif shld_tilt < 0:
                 label = "left_low"
             else:
                 label = "right_low"
@@ -384,7 +471,7 @@ class PostureAnalyzer:
 
             if abs(hip_t) < 2.0:
                 label = "level"
-            elif hip_t > 0:
+            elif hip_t < 0:
                 label = "left_low"
             else:
                 label = "right_low"
@@ -462,10 +549,10 @@ def _run_example() -> None:
     )
     m2 = analyser_partial.analyse()
     print(f"  shoulder_tilt     = {m2.shoulder_tilt}")
-    print(f"  hip_tilt          = {m2.hip_tilt}      ← None (right hip missing)")
-    print(f"  spine_inclination = {m2.spine_inclination}      ← None (right hip missing)")
-    print(f"  torso_symmetry    = {m2.torso_symmetry}      ← None (right hip missing)")
-    print(f"  torso_area        = {m2.torso_area}      ← None (right hip missing)")
+    print(f"  hip_tilt          = {m2.hip_tilt}      (None: right hip missing)")
+    print(f"  spine_inclination = {m2.spine_inclination}      (None: right hip missing)")
+    print(f"  torso_symmetry    = {m2.torso_symmetry}      (None: right hip missing)")
+    print(f"  torso_area        = {m2.torso_area}      (None: right hip missing)")
 
     print("\n" + "=" * 60)
 
